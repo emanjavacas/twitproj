@@ -13,7 +13,8 @@ class SListener(StreamListener):
         self.api = api or API()
         self.counter = 0
         self.fileprefix = fileprefix
-        self.output = self.update_outputfile()
+        self.deletefile = 'delete.txt'
+        self.update_outputfile()
         self.tweet_keys = {'created_at' : None,
                            'text' : None,
                            'id' : None,
@@ -43,19 +44,25 @@ class SListener(StreamListener):
             if data['coordinates']:
                 self.on_status(data)
 
+    def on_delete(self, status_id, user_id):
+        with open(self.deletefile, 'a') as f:
+            f.write(str(status_id) + '\n')
+        return
+    
     def on_status(self, status):
-        with codecs.open(self.output, 'w', 'utf-8') as f:
+        with codecs.open(self.output, 'a', 'utf-8') as f:
             f.write(self.handle_tweet(status) + '\n')
-        # self.output.write(handle_tweet(status) + '\n')
         self.counter += 1
         if self.counter >= 5000:
             self.update_outputfile()
+            self.counter = 0
             return False
         return
 
     def update_outputfile(self):
         self.output = './streaming_data/' + self.fileprefix + '_' + \
                       time.strftime('%d%m%y_%H%M%S') + '.json'
+
 
     def handle_tweet(self, tweet):
         '''
@@ -84,7 +91,7 @@ def _filter_json(d, json_obj, acc):
         else: #dict
             _filter_json(v, json_obj[k], acc[k])
 
-def handle_lang(tweet, detector):
+def handle_lang(detector, tweet):
     '''
     return language guesses according to the packages:
     ldig
