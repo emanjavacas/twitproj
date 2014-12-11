@@ -4,10 +4,11 @@ import time, json, codecs
 from ldig import ldig
 import langid
 
+
+    
 # create a subclass of StreamListener with desired settings
 class SListener(StreamListener):
     ''' creates a stream '''
-    __detector = ldig.ldig('ldig/models/model.latin')
 
     def __init__(self, api=None, fileprefix='streamer'):
         self.api = api or API()
@@ -27,8 +28,6 @@ class SListener(StreamListener):
 
     def on_data(self, raw_data):
         data = json.loads(raw_data)
-        # if 'in_reply_to_status_id' in data:
-        #     self.on_status(data)
         if 'delete' in data:
             delete = json.loads(data)['delete']['status']
             if self.on_delete(delete['id'], delete['user_id']) is False:
@@ -63,26 +62,39 @@ class SListener(StreamListener):
         self.output = './streaming_data/' + self.fileprefix + '_' + \
                       time.strftime('%d%m%y_%H%M%S') + '.json'
 
-
     def handle_tweet(self, tweet):
         '''
         filters an incoming tweet in json form according to
         a specified tweet_key and adds language guesses
         '''
+        # filter tweet
         my_tweet = filter_json(self.tweet_keys, tweet)
-        ldig_lang, langid_lang = handle_lang(SListener.__detector, tweet)
-        my_tweet['ldig_lang'] = ldig_lang
-        my_tweet['langid_lang'] = langid_lang
+        # add lang guesses
+        guesses = handle_lang(tweet['text'])
+        for k, v in guesses.items():
+            my_tweet[k] = v
+        # process tweet
         my_tweet['text'] = unicode(my_tweet['text']).encode('utf-8')
+        # monitoring
+        print "%s\nTwitter: [%s], LDIG: [%s], langid: [%s]" \
+            % (my_tweet['text'].decode('utf-8'), my_tweet['lang'], \
+            my_tweet['langid_guess'], my_tweet['ldig_guess'])
+        print my_tweet['coordinates']
+        print "***"
         return json.dumps(my_tweet)
 
 def filter_json(keys, json_obj):
-    e = defaultdict(defaultdict)
-    _filter_json(keys, json_obj, e)
-    return e
+    '''
+    closure on _filter_json applying SListener.keys
+    '''
+    acc = defaultdict(defaultdict)
+    _filter_json(keys, json_obj, acc)
+    return acc
 
-def _filter_json(d, json_obj, acc):
-    for k, v in d.items():
+def _filter_json(keys, json_obj, acc):
+    ''' filter a json object according to a python dictionary
+    :params keys: python dict, leaves are either None or a list'''
+    for k, v in keys.items():
         if type(v) == list:
             for i in v:
                 acc[k][i] = json_obj[k][i]
@@ -91,20 +103,17 @@ def _filter_json(d, json_obj, acc):
         else: #dict
             _filter_json(v, json_obj[k], acc[k])
 
-def handle_lang(detector, tweet):
-    '''
-    return language guesses according to the packages:
-    ldig
-    lang_id
-    '''
-    ldig_lang = detector.detect('model.latin', tweet['text'])[1]
-    langid_lang = langid.classify(tweet['text'])[0]
-    # monitoring
-    print "%s\nTwitter: [%s], LDIG: [%s], langid: [%s]" \
-        % (unicode(tweet['text']), tweet['lang'],
-        ldig_lang, langid_lang)
-    print tweet['coordinates']
-    print "***"
-    # return
-    return ldig_lang, langid_lang
+det = ldig.ldig('ldig/models/model.latin')
+detectors = {
+    'langid_guess' : lambda x: langid.classify(x)[0],
+    'ldig_guess' : lambda x:
+        det.detect('model.latin', x)[1]}
+    
+def handle_lang(tweet):
+    ''' return language guesses according the detectors dictionary '''
+    return {k : v(tweet) for k, v in detectors.items()}
+
+
+
+
 
