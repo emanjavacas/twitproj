@@ -28,8 +28,9 @@ def main(**kwargs):
     api = tweepy.API(auth)
     # set connection
     stream = tweepy.Stream(auth=auth,
-                           listener=SListener(api=api,
-                           fileprefix=fileprefix))
+                           listener=SListener(
+                               api=api,
+                               fileprefix=fileprefix))
     print kwargs
     while True:
         try:
