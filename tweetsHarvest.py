@@ -3,7 +3,6 @@ import tweepy
 import argparse
 from time import sleep
 
-
 def get_login(loginfile):
     with open(loginfile, 'r') as f:
         auths=[l.split(' ')[0] for l in f.readlines()]        
