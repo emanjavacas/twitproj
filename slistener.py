@@ -4,7 +4,15 @@ import time, json, codecs
 from ldig import ldig
 import langid
 
-
+det = ldig.ldig('ldig/models/model.latin')
+detectors = {
+    'langid_guess' : lambda x: langid.classify(x)[0],
+    'ldig_guess' : lambda x:
+        det.detect('model.latin', x)[1]}
+    
+def handle_lang(tweet):
+    ''' return language guesses according the detectors dictionary '''
+    return {k : v(tweet) for k, v in detectors.items()}
     
 # create a subclass of StreamListener with desired settings
 class SListener(StreamListener):
@@ -102,16 +110,6 @@ def _filter_json(keys, json_obj, acc):
             acc[k] = json_obj[k]
         else: #dict
             _filter_json(v, json_obj[k], acc[k])
-
-det = ldig.ldig('ldig/models/model.latin')
-detectors = {
-    'langid_guess' : lambda x: langid.classify(x)[0],
-    'ldig_guess' : lambda x:
-        det.detect('model.latin', x)[1]}
-    
-def handle_lang(tweet):
-    ''' return language guesses according the detectors dictionary '''
-    return {k : v(tweet) for k, v in detectors.items()}
 
 
 
