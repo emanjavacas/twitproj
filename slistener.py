@@ -7,9 +7,13 @@ import langid
 det = ldig.ldig('ldig/models/model.latin')
 detectors = {
     'langid_guess' : lambda x: langid.classify(x)[0],
-    'ldig_guess' : lambda x:
-        det.detect('model.latin', x)[1]}
-    
+    'ldig_guess' : lambda x: det.detect('model.latin', x)[1]
+    }
+
+#not-tested
+# "cld" : lambda x: cld.detect(x.encode('utf-8'))[1]
+#('SPANISH', 'es', True, 134, [('SPANISH', 'es', 100, 84.11214953271028)])
+
 def handle_lang(tweet):
     ''' return language guesses according the detectors dictionary '''
     return {k : v(tweet) for k, v in detectors.items()}
@@ -92,9 +96,7 @@ class SListener(StreamListener):
         return json.dumps(my_tweet)
 
 def filter_json(keys, json_obj):
-    '''
-    closure on _filter_json applying SListener.keys
-    '''
+    '''   closure on _filter_json applying SListener.keys    '''
     acc = defaultdict(defaultdict)
     _filter_json(keys, json_obj, acc)
     return acc
@@ -110,8 +112,3 @@ def _filter_json(keys, json_obj, acc):
             acc[k] = json_obj[k]
         else: #dict
             _filter_json(v, json_obj[k], acc[k])
-
-
-
-
-
