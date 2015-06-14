@@ -1,7 +1,10 @@
 from collections import defaultdict
 from ldig import ldig
+import langdetect 
 import langid
 import cld
+import re
+import codecs
 
 # http://boundingbox.klokantech.com
 boxes = {
@@ -25,19 +28,38 @@ tweet_keys = {'created_at': None,
 
 
 det = ldig.ldig('ldig/models/model.latin')
+def langDetect(tweet):
+    try:
+        return langdetect.detect(tweet)
+    except langdetect.lang_detect_exception.LangDetectException:
+        return "unk"
+
 detectors = {
     'langid_guess': lambda x: langid.classify(x)[0],
-    'ldig_guess': lambda x:
-        det.detect('model.latin', x)[1],
-    'cld_guess': lambda x: cld.detect(x.encode('utf-8'))[1]
+    'ldig_guess': lambda x:  det.detect('model.latin', x)[1],
+    'cld_guess': lambda x: cld.detect(x.encode('utf-8'))[1],
+    'langdetect_guess' : lambda x: langDetect(x)
     }
+
+regexes = [
+    r'\(@[^)]+\)',
+    r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
+    r'#[^ ]+',
+    r'@[^ ]+'
+]
+with codecs.open('smilies.txt', 'r', 'utf-8') as f:
+    smilies = "|".join(map(re.escape, [s for s in f.read().strip().split('\t')]))
+
+def preprocess(tweet, rem_smilies=False):
+    for r in regexes:
+        tweet = re.sub(r, "", tweet)
+    if rem_smilies:
+        tweet = re.sub(smilies, "", tweet)
+    return tweet.strip()
 
 
 def in_rect(x, y, x1, y1, x2, y2):
-    if x >= x1 and x <= x2 and y >= y1 and y <= y2:
-        return True
-    else:
-        return False
+    return x >= x1 and x <= x2 and y >= y1 and y <= y2
 
 
 def get_login(loginfile):
@@ -68,12 +90,13 @@ def _filter_json(keys, json_obj, acc):
             _filter_json(v, json_obj[k], acc[k])
 
 
-def handle_lang(tweet):
+def handle_lang(tweet, rem_smilies=False):
     ''' return language guesses according the detectors dictionary '''
+    tweet = preprocess(tweet, rem_smilies)
     return {k: v(tweet) for k, v in detectors.items()}
 
 
-def handle_tweet(tweet, tweet_keys, verbose=True):
+def handle_tweet(tweet, tweet_keys, verbose=True, rem_smilies=False):
     '''
     filters an incoming tweet in json form according to
     a specified tweet_key and adds language guesses
@@ -91,10 +114,9 @@ def handle_tweet(tweet, tweet_keys, verbose=True):
         # my_tweet['text'] = unicode(my_tweet['text']).encode('utf-8')
         # monitoring
     if verbose:
-        print "%s\n%s: [%s], %s: [%s], %s: [%s], %s: [%s]" \
+        print "%s\n%s [%s], %s [%s], %s [%s], %s [%s], %s [%s]"  \
             % tuple([my_tweet['text'].encode('utf-8')] +
-                    [i.encode('utf-8')
-                     for tpl in my_tweet['langs'].items() for i in tpl])
+                    [i.encode('utf-8') for tpl in my_tweet['langs'].items() for i in tpl])
         print my_tweet['coordinates']
         print "***"
     # return json.dumps(my_tweet)

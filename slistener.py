@@ -14,7 +14,7 @@ class SListener(StreamListener):
         self.counter = 0
         self.fileprefix = fileprefix
         self.deletefile = 'delete.txt'
-        self.update_outputfile()
+        # self.update_outputfile()
         self.tweet_keys = tweet_keys
 
     def on_data(self, raw_data):
@@ -51,9 +51,9 @@ class SListener(StreamListener):
     #     return
 
     def on_status(self, status):
-        tweet = handle_tweet(status)
+        tweet = handle_tweet(status, self.tweet_keys)
         tweet["city"] = self.fileprefix
-        coll.insert(tweet)
+        self.coll.insert(tweet)
         return
 
     def update_outputfile(self):
