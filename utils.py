@@ -1,10 +1,13 @@
 from collections import defaultdict
 from ldig import ldig
-import langdetect 
+import langdetect
 import langid
 import cld
 import re
 import codecs
+import json
+import tweepy
+from time import time
 
 # http://boundingbox.klokantech.com
 boxes = {
@@ -14,6 +17,26 @@ boxes = {
     'madrid':    [-3.834162, 40.312064, -3.524912, 40.56359],
     'brussels':  [4.208164, 50.745668, 4.562496, 50.942552]
 }
+
+
+centers = {
+    "berlin": [52.516042, 13.390245],
+    "amsterdam": [52.370292, 4.900077],
+    "antwerp": [51.220763, 4.401598],
+    "brussels": [50.844625, 4.352359]
+}
+
+
+with codecs.open('smilies.txt', 'r', 'utf-8') as f:
+    smilies = "|".join(map(re.escape,
+                           [s for s in f.read().strip().split('\t')]))
+
+
+bots = {'berlin':
+        [112169930, 1212442812, 1336218432, 1597521211,
+         160874621, 161262801, 186899860, 288715859,
+         71528370, 81237494, 2309807226, 343197788,
+         352734759, 422055979, 436016601, 456864067]}
 
 
 tweet_keys = {'created_at': None,
@@ -28,6 +51,8 @@ tweet_keys = {'created_at': None,
 
 
 det = ldig.ldig('ldig/models/model.latin')
+
+
 def langDetect(tweet):
     try:
         return langdetect.detect(tweet)
@@ -38,17 +63,26 @@ detectors = {
     'langid_guess': lambda x: langid.classify(x)[0],
     'ldig_guess': lambda x:  det.detect('model.latin', x)[1],
     'cld_guess': lambda x: cld.detect(x.encode('utf-8'))[1],
-    'langdetect_guess' : lambda x: langDetect(x)
+    'langdetect_guess': lambda x: langDetect(x)
     }
 
 regexes = [
-    r'\(@[^)]+\)',
-    r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
-    r'#[^ ]+',
-    r'@[^ ]+'
+    re.compile('\(@[^)]+\)'),
+    re.compile('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|'
+               '[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'),
+    re.compile('#[^ ]+'),
+    re.compile('@[^ ]+')
 ]
-with codecs.open('smilies.txt', 'r', 'utf-8') as f:
-    smilies = "|".join(map(re.escape, [s for s in f.read().strip().split('\t')]))
+
+
+TIME = time()
+def sleepy_time(lim=180):
+    global TIME
+    process_time = time() - TIME
+    TIME = time()
+    cooldown = float(15 * 60) / float(lim) - process_time
+    return cooldown if cooldown > 0 else 0
+
 
 def preprocess(tweet, rem_smilies=False):
     for r in regexes:
@@ -65,7 +99,9 @@ def in_rect(x, y, x1, y1, x2, y2):
 def get_login(loginfile):
     with open(loginfile, 'r') as f:
         auths = [l.split(' ')[0] for l in f.readlines()]
-    return auths
+    auth = tweepy.OAuthHandler(auths[0], auths[1])
+    auth.set_access_token(auths[2], auths[3])
+    return auth
 
 
 def filter_json(keys, json_obj):
@@ -96,7 +132,7 @@ def handle_lang(tweet, rem_smilies=False):
     return {k: v(tweet) for k, v in detectors.items()}
 
 
-def handle_tweet(tweet, tweet_keys, verbose=True, rem_smilies=False):
+def handle_tweet(tweet, tweet_keys=tweet_keys, verbose=True, rem_smilies=False):
     '''
     filters an incoming tweet in json form according to
     a specified tweet_key and adds language guesses
@@ -131,3 +167,44 @@ def read_ids(infn):
             user_id, count = i.strip().split(",")
             ids.append((user_id, int(float(count))))
     return ids
+
+
+def stream_tweets(fname):
+    with codecs.open(fname, 'r', 'utf-8') as f:
+        for l in f:
+            line = l.strip()
+            yield json.loads(line)
+
+
+def tweet_to_lang(langs):
+    my_langs = ['langdetect_guess', 'langid_guess', 'cld_guess']
+    result = defaultdict(int)
+    for k, v in langs.items():
+        if k in my_langs:
+            result[v] += 1
+    for k, v in result.items():
+        if v >= (len(my_langs) / 2) + 1:
+            return k
+    return None
+
+
+def write_by_lang(infn, outfn, *fields):
+    "filters a json tweet file for lang, coordinates and optional fields"
+    tweets = stream_tweets(infn)
+    with open(outfn, 'a+') as f:
+        for tweet in tweets:
+            lang = tweet_to_lang(tweet['langs'])
+            x, y = tweet['coordinates']['coordinates']
+            user_id = str(tweet["user"]["id"])
+            output = [lang, str(x), str(y), user_id]
+            for field in fields:
+                try:
+                    output.append(str(tweet[field]))
+                except KeyError:
+                    print "Field [%s] not found at tweet [%s]" \
+                        % (str(f), str(tweet['id']))
+                    continue
+            if tweet['user']['id'] not in bots['berlin'] and lang:
+                    f.write(",".join(output) + "\n")
+            elif lang:
+                f.write(",".join(output) + "\n")

@@ -1,21 +1,32 @@
 from utils import *
 from tweepy import StreamListener, API
-import time
 import json
+from Queue import Queue
+from threading import Thread
 
 
-# create a subclass of StreamListener with desired settings
 class SListener(StreamListener):
-    ''' creates a stream '''
 
-    def __init__(self, coll, api=None, fileprefix='streamer'):
+    def __init__(self, coll, api=None, fileprefix='streamer', workers=5):
         self.coll = coll
         self.api = api or API()
         self.counter = 0
         self.fileprefix = fileprefix
         self.deletefile = 'delete.txt'
-        # self.update_outputfile()
         self.tweet_keys = tweet_keys
+        self.queue = Queue()
+        for _ in range(workers):
+            worker = Thread(target=self.insert_tweet, args=())
+            worker.setDaemon(True)
+            worker.start()
+
+    def insert_tweet(self):
+        while True:
+            status = self.queue.get()
+            tweet = handle_tweet(status, self.tweet_keys)
+            tweet["city"] = self.fileprefix
+            self.coll.insert(tweet)
+            self.queue.task_done()
 
     def on_data(self, raw_data):
         data = json.loads(raw_data)
@@ -39,24 +50,6 @@ class SListener(StreamListener):
             f.write(str(status_id) + '\n')
         return
 
-    # def on_status(self, status):
-    #     with codecs.open(self.output, 'a', 'utf-8') as f:
-    #         f.write(self.handle_tweet(status) + '\n')
-    #     print self.handle_tweet(status).encode('utf-8')
-    #     self.counter += 1
-    #     if self.counter >= 5000:
-    #         self.update_outputfile()
-    #         self.counter = 0
-    #         return False
-    #     return
-
     def on_status(self, status):
-        tweet = handle_tweet(status, self.tweet_keys)
-        tweet["city"] = self.fileprefix
-        self.coll.insert(tweet)
+        self.queue.put(status)
         return
-
-    def update_outputfile(self):
-        self.output = './streaming_data/' + self.fileprefix + '_' + \
-                      time.strftime('%d%m%y_%H%M%S') + '.json'
-

@@ -1,6 +1,5 @@
 import pymongo
-import langdetect
-from utils import handle_lang
+from ..utils import handle_lang
 import sys
 
 print sys.argv[1]

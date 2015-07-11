@@ -11,14 +11,12 @@ def main(**kwargs):
     conn = pymongo.MongoClient()
     db = conn[kwargs.pop('db')]
     coll = db[kwargs.pop('coll')]
-    fileprefix = kwargs.pop('fileprefix')
     secs = kwargs.pop('secs')
     loginfile = kwargs.pop('loginfile')
+    fileprefix = kwargs.pop('fileprefix')
     kwargs['locations'] = boxes[kwargs['locations']]
-    auths = get_login(loginfile)
     # authenticate
-    auth = tweepy.OAuthHandler(auths[0], auths[1])
-    auth.set_access_token(auths[2], auths[3])
+    auth = get_login(loginfile)
     api = tweepy.API(auth)
     # set connection
     stream = tweepy.Stream(auth=auth,
@@ -35,6 +33,7 @@ def main(**kwargs):
             stream.disconnect()
             print "Waiting [%d] sec until reconnecting" % secs
             sleep(secs)
+
 
 if __name__  == '__main__':
     parser = argparse.ArgumentParser()
@@ -53,8 +52,3 @@ if __name__  == '__main__':
                         default=60, help="Wait time between connections")
     args = vars(parser.parse_args())
     main(**args)
-
-
-
-
-
