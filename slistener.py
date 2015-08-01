@@ -7,13 +7,11 @@ from threading import Thread
 
 class SListener(StreamListener):
 
-    def __init__(self, coll, api=None, fileprefix='streamer', workers=5):
+    def __init__(self, coll, api=None, city='unknown', workers=5):
         self.coll = coll
         self.api = api or API()
-        self.counter = 0
-        self.fileprefix = fileprefix
+        self.city = city
         self.deletefile = 'delete.txt'
-        self.tweet_keys = tweet_keys
         self.queue = Queue()
         for _ in range(workers):
             worker = Thread(target=self.insert_tweet, args=())
@@ -23,8 +21,8 @@ class SListener(StreamListener):
     def insert_tweet(self):
         while True:
             status = self.queue.get()
-            tweet = handle_tweet(status, self.tweet_keys)
-            tweet["city"] = self.fileprefix
+            tweet = handle_tweet(status)
+            tweet["city"] = self.city
             self.coll.insert(tweet)
             self.queue.task_done()
 

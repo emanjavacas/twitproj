@@ -8,6 +8,10 @@ import codecs
 import json
 import tweepy
 from time import time
+import os
+
+main_dir = '/Users/quique/code/python/twitproj/'
+
 
 # http://boundingbox.klokantech.com
 boxes = {
@@ -15,7 +19,8 @@ boxes = {
     'berlin':    [13.089155, 52.33963, 13.761118, 52.675454],
     'antwerp':   [4.245066, 51.113175, 4.611823, 51.323395],
     'madrid':    [-3.834162, 40.312064, -3.524912, 40.56359],
-    'brussels':  [4.208164, 50.745668, 4.562496, 50.942552]
+    'brussels':  [4.208164, 50.745668, 4.562496, 50.942552],
+    'hamburg':   [9.720519, 53.393829, 10.33352, 53.743495]
 }
 
 
@@ -23,11 +28,12 @@ centers = {
     "berlin": [52.516042, 13.390245],
     "amsterdam": [52.370292, 4.900077],
     "antwerp": [51.220763, 4.401598],
-    "brussels": [50.844625, 4.352359]
+    "brussels": [50.844625, 4.352359],
+    "hamburg": [53.561427, 10.032878]
 }
 
 
-with codecs.open('smilies.txt', 'r', 'utf-8') as f:
+with codecs.open(os.path.join(main_dir, 'smilies.txt'), 'r', 'utf-8') as f:
     smilies = "|".join(map(re.escape,
                            [s for s in f.read().strip().split('\t')]))
 
@@ -50,7 +56,7 @@ tweet_keys = {'created_at': None,
               'retweeted': None}
 
 
-det = ldig.ldig('ldig/models/model.latin')
+det = ldig.ldig(os.path.join(main_dir, 'ldig/models/model.latin'))
 
 
 def langDetect(tweet):
@@ -76,6 +82,8 @@ regexes = [
 
 
 TIME = time()
+
+
 def sleepy_time(lim=180):
     global TIME
     process_time = time() - TIME
@@ -165,6 +173,8 @@ def read_ids(infn):
         next(f)
         for i in f:
             user_id, count = i.strip().split(",")
+            if user_id.startswith('"'):
+                user_id = user_id[1:-1]
             ids.append((user_id, int(float(count))))
     return ids
 
@@ -185,7 +195,7 @@ def tweet_to_lang(langs):
     for k, v in result.items():
         if v >= (len(my_langs) / 2) + 1:
             return k
-    return None
+    return 'unknown'
 
 
 def write_by_lang(infn, outfn, *fields):
