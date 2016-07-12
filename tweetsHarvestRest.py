@@ -16,7 +16,7 @@ tweepy.models.Status.parse = parse
 
 
 def insert_tweet(tweet, conn, city):
-    my_tweet = handle_tweet(tweet, verbose=False)
+    my_tweet = handle_tweet(tweet, verbose=True)
     my_tweet['city'] = city
     try:
         conn.insert(my_tweet)
@@ -35,7 +35,6 @@ def main(**kwargs):
     loginfile = kwargs.pop('loginfile')
     city = kwargs.pop('fileprefix')
     center = centers[kwargs['locations']]
-#    max_id = 0
     # authenticate
     print "authenticating"
     auth = get_login(loginfile)
@@ -44,12 +43,10 @@ def main(**kwargs):
     geocode = ",".join([str(i) for i in center]) + "," + str(radius) + "km"    
     while True:
         cursor = tweepy.Cursor(api.search, geocode=geocode)
-#                               , since_id=max_id)
         for page in cursor.pages():
             print "got [%d] tweets" % len(page)
             sleep(secs)
             for tweet in page:
-#                max_id = tweet.id if tweet.id > max_id else max_id
                 if tweet.coordinates:
                     insert_tweet(json.loads(tweet.json), coll, city)
 

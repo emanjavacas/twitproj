@@ -14,7 +14,6 @@ import os
 main_dir = "/home/manjavacas/python/twitproj/"
 det = ldig.ldig(os.path.join(main_dir, 'ldig/models/model.latin'))
 
-
 def langDetect(tweet):
     try:
         return langdetect.detect(tweet)
@@ -45,14 +44,12 @@ class Logger(object):
         logger.addHandler(f)
         return logger
 
-
 def preprocess(tweet, rem_smilies=False):
     for r in regexes:
         tweet = re.sub(r, "", tweet)
     if rem_smilies:
         tweet = re.sub(smilies, "", tweet)
     return tweet.strip()
-
 
 def in_rect(x, y, x1, y1, x2, y2):
     return x >= x1 and x <= x2 and y >= y1 and y <= y2
@@ -81,7 +78,6 @@ def loginOAuth(loginfile):
     api = tweepy.API(auth)
     return api
 
-
 def filter_json(keys, json_obj):
     '''
     closure on _filter_json applying SListener.keys
@@ -109,7 +105,6 @@ def handle_lang(tweet, rem_smilies=False):
     tweet = preprocess(tweet, rem_smilies)
     return {k: v(tweet) for k, v in detectors.items()}
 
-
 def _log_tweet(tweet, verbose=True):
     if not verbose:
         return
@@ -121,10 +116,11 @@ def _log_tweet(tweet, verbose=True):
     print "***"
 
 
-def handle_tweet(tweet, tweet_keys=tweet_keys,
-                 verbose=True, rem_smilies=False):
-    ''' filters an incoming tweet in json form according to
-    a specified tweet_key and adds language guesses  '''
+def handle_tweet(tweet, tweet_keys=tweet_keys, verbose=True, rem_smilies=False):
+    ''' 
+    filters an incoming tweet in json form according to
+    a specified tweet_key and adds language guesses
+    '''
     my_tweet = filter_json(tweet_keys, tweet)
     guesses = handle_lang(tweet['text'])
     guesses['twitter_guess'] = my_tweet['lang']
@@ -187,4 +183,3 @@ def write_by_lang(infn, outfn, *fields):
                     f.write(",".join(output) + "\n")
             elif lang:
                 f.write(",".join(output) + "\n")
-
