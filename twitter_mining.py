@@ -4,7 +4,7 @@ import json
 import pymongo
 from time import sleep
 from datetime import datetime
-
+import sys
 
 @classmethod
 def parse(cls, api, raw):
@@ -15,92 +15,93 @@ def parse(cls, api, raw):
 tweepy.models.Status.first_parse = tweepy.models.Status.parse
 tweepy.models.Status.parse = parse
 
-
-def test_rate_limit(api, wait=True, buffer=.1):
-    """
-    http://stackoverflow.com/a/25141354/2420152
-    Tests whether the rate limit of the last request has been reached.
-    :param api: The `tweepy` api instance.
-    :param wait: A flag indicating whether to wait for the rate limit reset
-                 if the rate limit has been reached.
-    :param buffer: A buffer time in seconds that is added on to the waiting
-                   time as an extra safety margin.
-    :return: True if it is ok to proceed with the next request. False otherwise.
-    """
-    #Get the number of remaining requests
-    # remaining = int(api.last_response.getheader('x-rate-limit-remaining'))
-    data = api.rate_limit_status()['resources']['statuses']['/statuses/user_timeline']
-    remaining = data['remaining'] - 2
-    print "remaining [%d] requests" % remaining
-    #Check if we have reached the limit
-    if remaining == 0:
-        limit = data['limit']
-        reset = data['reset']
-        # limit = int(api.last_response.getheader('x-rate-limit-limit'))
-        # reset = int(api.last_response.getheader('x-rate-limit-reset'))
-        #Parse the UTC time
-        reset = datetime.fromtimestamp(reset)
-        #Let the user know we have reached the rate limit
-        print "0 of {} requests remaining until {}.".format(limit, reset)
-
-        if wait:
-            #Determine the delay and sleep
-            delay = (reset - datetime.now()).total_seconds() + buffer
-            print "Sleeping for {}s...".format(delay)
-            sleep(abs(delay))
-            #We have waited for the rate limit reset. OK to proceed.
-            return True
-        else:
-            #We have reached the rate limit.
-            return False 
-
-    #We have not reached the rate limit
-    return True
-
-
 def find_idx(lst, fn):
     i = 0
     while not fn(lst[i]):
         i+=1
     return i
 
-
+usage = """
+Usage: $ python (0) twitter_mining.py (1) dbname (2) coll (3) idfile (4) authfile (5) city (6) secs (opt 7) startid 
+"""
+if len(sys.argv) not in [7, 8]:
+    print usage
+    raise SystemExit
+        
 conn = pymongo.MongoClient()
-db = conn['twitdb']
-coll = db['berlin_by_id']
+db = conn[sys.argv[1]]
+coll = db[sys.argv[2]]
+ids = read_ids(sys.argv[3])
+auth = get_login(sys.argv[4])
+city = sys.argv[5]
+secs = int(sys.argv[6])
 
-auths = get_login("loginfile_test~")
-auth = tweepy.OAuthHandler(auths[0], auths[1])
-auth.set_access_token(auths[2], auths[3])
+#auth = tweepy.OAuthHandler(auths[0], auths[1])
+#auth.set_access_token(auths[2], auths[3])
 api = tweepy.API(auth)
 
-ids = read_ids("/home/manjavacas/berlin.id")
-# cursor = api.user_timeline(ids[100][0], count=1000)
+if len(sys.argv) == 8:
+    start = find_idx(ids, lambda x: x[0] == sys.argv[7])
+else:
+    start = 0
 
-
-start = find_idx(ids, lambda x: x[0] == "40902933")
+total = 0
 for i, _ in ids[start:]:
-    sleep(5)
-    try:
-        last = db.berlin_by_id.find({"user.id" : int(i)}).sort("id",1).next()
-        max_id = last["id"]
-    except StopIteration:
+    if total > 250:
+        total = 0
         continue
-    try:
-        cursor = api.user_timeline(i, count=4000, max_id=max_id)
-    except tweepy.error.TweepError as e:
-        print "exception " + str(e)
-        continue
-    print "retrieved %d" % len(cursor)
-    for tweet in cursor:
-        json_tweet = json.loads(tweet.json)
-        if json_tweet["coordinates"]:
-            x, y = json_tweet["coordinates"]["coordinates"]
-            in_city = in_rect(x, y, *boxes["berlin"])
-            my_tweet = handle_tweet(json_tweet, tweet_keys, verbose=False)
-            my_tweet['city'] = "berlin" if in_city else "unknown"
-            try:
-                coll.insert(my_tweet)
-                print "inserted tweet for id [%s]" % i
-            except pymongo.errors.DuplicateKeyError:
-                print "post already in the database"
+    cursor = tweepy.Cursor(api.user_timeline, id=i)
+    total = 0
+    print "*** retrieving id [%s]" % i
+    pages = cursor.pages()
+    for page in cursor.pages():
+        print "*** *** retrieved %d tweets from page" % len(page)
+        sleep(secs)
+        for tweet in page:
+            json_tweet = json.loads(tweet.json)
+            if json_tweet["coordinates"]:
+                x, y = json_tweet["coordinates"]["coordinates"]
+                in_city = in_rect(x, y, *boxes[city])
+                my_tweet = handle_tweet(json_tweet, tweet_keys, verbose=False)
+                my_tweet['city'] = city if in_city else "unknown"
+                try:
+                    coll.insert(my_tweet)
+                    total += 1
+                    print "*** *** *** inserted tweet for id [%s] in city [%s]" % (i, my_tweet['city'])
+                except pymongo.errors.DuplicateKeyError:
+                    print "post already in the database"
+
+class MineIds():
+    def __init__(self, api, ids):
+        self.auth = auth
+        self.ids = ids
+        self.total = 0
+
+    def put(self, tweet, coll):
+        try:
+            coll.insert(tweet)
+        except pymongo.errors.DuplicateKeyError:
+            print "post already in the database"
+
+    def handle_cursor(self, cursor):
+        try:
+            page = cursor.pages().next()
+
+    def run(self, coll, city=None, start=None, total=0):
+        start = find_idx(ids, lambda x: x[0] == start) if start else 0
+        for i, _ in self.ids[start]:
+            if total > self.total:
+                self.total = 0
+                continue
+            cursor = tweepy.Cursor(self.api.user_timeline, id=i)
+            print "*** *** retrieved %d tweets from page" % len(page)
+            sleep(secs)
+            for tweet in page:
+                json_tweet = json.loads(tweet.json)
+                if json_tweet["coordinates"]:
+                    x, y = json_tweet["coordinates"]["coordinates"]
+                    in_city = in_rect(x, y, *boxes[city])
+                    my_tweet = handle_tweet(json_tweet, tweet_keys, verbose=False)
+                    my_tweet['city'] = city if in_city else "unknown"
+                    self.put(my_tweet, coll)
+        
